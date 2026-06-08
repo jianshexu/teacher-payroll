@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>在线工资统计</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <section id="authPage" class="auth-page">
+    <form id="authForm" class="auth-card">
+      <h1>在线工资统计</h1>
+      <p>登录后可云端保存，多设备同步。</p>
+      <label>邮箱
+        <input id="authEmail" type="email" required placeholder="you@example.com">
+      </label>
+      <label>密码
+        <input id="authPassword" type="password" required placeholder="至少 6 位">
+      </label>
+      <div class="auth-actions">
+        <button id="loginBtn" class="primary" type="button">登录</button>
+        <button id="registerBtn" class="secondary" type="button">注册</button>
+      </div>
+      <p id="authMessage" class="auth-message"></p>
+    </form>
+  </section>
+
+  <div class="app-shell hidden">
+    <header class="topbar">
+      <div>
+        <h1>在线工资统计</h1>
+        <p id="todayLine">上完课，点模板，记工资。</p>
+      </div>
+      <div class="account-bar">
+        <div class="sync-state">
+          <span id="accountEmail">未登录</span>
+          <strong id="syncStatus">未同步</strong>
+        </div>
+        <div class="quick-total">
+          <span>本月合计</span>
+          <strong id="headerMonthTotal">¥0</strong>
+        </div>
+        <button id="logoutBtn" class="ghost small" type="button">退出登录</button>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="主要页面">
+      <button class="tab is-active" data-tab="record">上课记录</button>
+      <button class="tab" data-tab="templates">课程模板</button>
+      <button class="tab" data-tab="stats">工资统计</button>
+      <button class="tab" data-tab="students">学生管理</button>
+      <button class="tab" data-tab="classes">班级管理</button>
+      <button class="tab" data-tab="settings">工资标准/设置</button>
+    </nav>
+
+    <main>
+      <section id="record" class="page is-active">
+        <div class="layout two-col">
+          <form id="lessonForm" class="panel">
+            <div class="section-title">
+              <h2>快速记录</h2>
+              <button type="button" id="resetLessonBtn" class="ghost small">清空</button>
+            </div>
+            <input type="hidden" id="lessonId">
+            <input type="hidden" id="selectedTemplateId">
+
+            <label class="record-date-row">日期
+              <input id="lessonDate" type="date" required>
+            </label>
+
+            <div class="template-picker">
+              <div class="picker-head">
+                <strong>选择课程模板</strong>
+                <span>停用模板不会显示</span>
+              </div>
+              <div id="lessonTemplates" class="template-groups"></div>
+            </div>
+
+            <div id="selectedLessonSummary" class="selected-summary hidden"></div>
+
+            <div id="attendancePanel" class="attendance-panel hidden">
+              <div class="attendance-toolbar">
+                <strong id="attendanceSummary">总人数：0　到课：0　请假：0　缺席：0</strong>
+                <button id="allPresentBtn" type="button" class="secondary small">全到</button>
+              </div>
+              <div id="attendanceList" class="attendance-list"></div>
+            </div>
+
+            <div class="result-box">
+              <div>
+                <span>本次工资</span>
+                <strong id="computedAmount">¥0</strong>
+              </div>
+              <p id="priceSource">请选择课程模板后自动计算</p>
+              <p id="calcWarning" class="warning hidden"></p>
+            </div>
+
+            <div class="form-grid">
+              <label>本次实际工资
+                <input id="manualAmount" type="number" min="0" step="1" placeholder="不填则自动计算">
+              </label>
+              <label>备注
+                <input id="lessonNote" type="text" placeholder="试听课、补课、调课等">
+              </label>
+            </div>
+            <div class="quick-notes">
+              <button type="button" data-note="试听课">试听课</button>
+              <button type="button" data-note="补课">补课</button>
+              <button type="button" data-note="调课">调课</button>
+              <button type="button" data-note="临时改价">临时改价</button>
+              <button type="button" data-note="请假较多">请假较多</button>
+            </div>
+
+            <button class="primary wide" type="submit">保存上课记录</button>
+          </form>
+
+          <aside class="panel summary-panel">
+            <h2>今日概览</h2>
+            <div class="metric-row">
+              <div><span>今日工资</span><strong id="todayTotal">¥0</strong></div>
+              <div><span>今日课次</span><strong id="todayCount">0</strong></div>
+            </div>
+            <div class="mini-stats">
+              <div><span>一对一</span><strong id="todayOneTotal">¥0</strong></div>
+              <div><span>班课</span><strong id="todayClassTotal">¥0</strong></div>
+            </div>
+            <h3>今日明细</h3>
+            <div id="todayRecords" class="compact-list"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="templates" class="page">
+        <div class="layout two-col">
+          <form id="templateForm" class="panel">
+            <div class="section-title">
+              <h2>课程模板</h2>
+              <button id="resetTemplateBtn" class="ghost small" type="button">新增</button>
+            </div>
+            <input type="hidden" id="templateId">
+            <div class="form-grid">
+              <label>课程名称
+                <input id="templateName" type="text" required placeholder="例如：九年级周六班课">
+              </label>
+              <label>课程类型
+                <select id="templateType">
+                  <option value="oneToOne">一对一</option>
+                  <option value="classCourse">班课</option>
+                </select>
+              </label>
+              <label>年级
+                <select id="templateGrade"></select>
+              </label>
+              <label>排序
+                <input id="templateSort" type="number" step="1" value="100">
+              </label>
+              <label id="templateClassWrap">关联班级
+                <select id="templateClass"></select>
+              </label>
+              <label id="templateBillingWrap">计费方式
+                <select id="templateBillingMode">
+                  <option value="auto">自动计算</option>
+                  <option value="fixed">固定价格</option>
+                </select>
+              </label>
+              <label id="templateFixedPriceWrap">固定价格
+                <input id="templateFixedPrice" type="number" min="0" step="1" placeholder="可为空">
+              </label>
+            </div>
+            <div id="templateStudentsWrap" class="student-picker">
+              <div class="picker-head">
+                <strong>关联个人学生</strong>
+                <span id="templateStudentHint">一对一请选择 1 名学生</span>
+              </div>
+              <div id="templateStudents" class="check-list"></div>
+            </div>
+            <label>备注
+              <textarea id="templateNote" rows="2" placeholder="上课时间、固定说明等"></textarea>
+            </label>
+            <label class="inline-check">
+              <input id="templateEnabled" type="checkbox" checked>
+              <span>启用这个课程模板</span>
+            </label>
+            <button class="primary wide" type="submit">保存课程模板</button>
+          </form>
+          <div class="panel">
+            <h2>模板列表</h2>
+            <div id="templateList" class="item-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="stats" class="page">
+        <div class="panel">
+          <div class="section-title">
+            <h2>工资统计</h2>
+            <div class="row-actions">
+              <button id="exportCsvBtn" class="secondary" type="button">导出本月 CSV</button>
+              <button id="exportJsonBtn" class="secondary" type="button">导出 JSON 备份</button>
+              <button id="importJsonBtn" class="ghost" type="button">导入备份</button>
+              <input id="importJsonFile" class="hidden" type="file" accept="application/json,.json">
+            </div>
+          </div>
+          <div class="filters">
+            <label>按日期查看
+              <input id="filterDate" type="date">
+            </label>
+            <label>按月份查看
+              <input id="filterMonth" type="month">
+            </label>
+          </div>
+          <div class="stats-grid">
+            <div class="stat"><span>今日工资</span><strong id="statsTodayTotal">¥0</strong></div>
+            <div class="stat"><span>本月工资</span><strong id="statsMonthTotal">¥0</strong></div>
+            <div class="stat"><span>当前筛选总工资</span><strong id="statsTotal">¥0</strong></div>
+            <div class="stat"><span>当前筛选总课次</span><strong id="statsCount">0</strong></div>
+            <div class="stat"><span>一对一合计</span><strong id="oneTotal">¥0</strong><em id="oneCount">0 次</em></div>
+            <div class="stat"><span>班课合计</span><strong id="classTotal">¥0</strong><em id="classCount">0 次</em></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>日期范围</th>
+                  <th>课程名称</th>
+                  <th>类型</th>
+                  <th>年级</th>
+                  <th>班级</th>
+                  <th>学生</th>
+                  <th>到课</th>
+                  <th>请假</th>
+                  <th>缺席</th>
+                  <th>次数</th>
+                  <th>总金额</th>
+                  <th>价格来源</th>
+                  <th>备注</th>
+                  <th>确认</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="recordTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="students" class="page">
+        <div class="layout two-col">
+          <form id="studentForm" class="panel">
+            <div class="section-title">
+              <h2>个人学生</h2>
+              <button type="button" id="resetStudentBtn" class="ghost small">新增</button>
+            </div>
+            <input type="hidden" id="studentId">
+            <div class="form-grid">
+              <label>学生姓名
+                <input id="studentName" type="text" required placeholder="例如：张三">
+              </label>
+              <label>年级
+                <select id="studentGrade"></select>
+              </label>
+              <label>一对一特殊价格
+                <input id="specialOne" type="number" min="0" step="1" placeholder="可为空">
+              </label>
+            </div>
+            <label>备注
+              <textarea id="studentNote" rows="3" placeholder="特殊计费、固定说明等"></textarea>
+            </label>
+            <button class="primary wide" type="submit">保存学生</button>
+          </form>
+          <div class="panel">
+            <div class="section-title">
+              <h2>学生列表</h2>
+              <input id="studentSearch" class="search" type="search" placeholder="搜索学生">
+            </div>
+            <div class="filters compact-filters">
+              <label>年级筛选
+                <select id="studentGradeFilter"></select>
+              </label>
+            </div>
+            <div id="studentList" class="item-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="classes" class="page">
+        <div class="layout two-col">
+          <form id="classForm" class="panel">
+            <div class="section-title">
+              <h2>班级资料</h2>
+              <button type="button" id="resetClassBtn" class="ghost small">新增</button>
+            </div>
+            <input type="hidden" id="classId">
+            <div class="form-grid">
+              <label>班级名称
+                <input id="className" type="text" required placeholder="例如：高一A班">
+              </label>
+              <label>年级
+                <select id="classGrade"></select>
+              </label>
+              <label>班课固定价格
+                <input id="classBasePrice" type="number" min="0" step="1" placeholder="可为空">
+              </label>
+              <label>每增加 1 人加价
+                <input id="classExtraPrice" type="number" min="0" step="1" value="10">
+              </label>
+            </div>
+            <label>批量添加学生
+              <textarea id="classBulkStudents" rows="4" placeholder="张三、李四、王五&#10;也可以每行一个姓名"></textarea>
+            </label>
+            <button id="addClassStudentsBtn" class="secondary" type="button">添加到班级名单</button>
+            <div class="student-picker">
+              <div class="picker-head">
+                <strong>班级学生名单</strong>
+                <span>点“停用”后不会出现在新课点名里</span>
+              </div>
+              <div id="classStudentList" class="class-student-list"></div>
+            </div>
+            <label>备注
+              <textarea id="classNote" rows="3" placeholder="固定班课价格、上课时间等"></textarea>
+            </label>
+            <button class="primary wide" type="submit">保存班级</button>
+          </form>
+          <div class="panel">
+            <h2>班级列表</h2>
+            <div id="classList" class="item-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="settings" class="page">
+        <div class="panel">
+          <div class="section-title">
+            <h2>工资标准</h2>
+            <button id="resetStandardsBtn" class="ghost small" type="button">恢复默认</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>年级</th>
+                  <th>一对一</th>
+                  <th>班课基础价（2人）</th>
+                </tr>
+              </thead>
+              <tbody id="standardsTable"></tbody>
+            </table>
+          </div>
+          <div class="form-grid setting-row">
+            <label>默认班课每增加 1 人加价
+              <input id="defaultSmallExtra" type="number" min="0" step="1">
+            </label>
+          </div>
+          <button id="saveStandardsBtn" class="primary" type="button">保存设置</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./supabase-config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
