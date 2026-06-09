@@ -452,6 +452,14 @@ textarea:focus {
   cursor: default;
 }
 
+.trial-students {
+  margin-top: 4px;
+}
+
+.attendance-card.trial {
+  border-style: dashed;
+}
+
 .empty {
   color: var(--muted);
   padding: 12px;
@@ -660,6 +668,16 @@ th {
 .item-list {
   display: grid;
   gap: 10px;
+}
+
+.template-list-group {
+  display: grid;
+  gap: 10px;
+}
+
+.template-list-group h3 {
+  margin: 6px 0 0;
+  color: #33414a;
 }
 
 .compact-item,

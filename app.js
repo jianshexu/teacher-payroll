@@ -150,6 +150,7 @@ function init() {
   $("lessonForm").addEventListener("submit", saveLesson);
   $("resetLessonBtn").addEventListener("click", resetLessonForm);
   $("manualAmount").addEventListener("input", updateLessonCalculation);
+  $("trialStudentsInput").addEventListener("input", syncTrialStudents);
   $("allPresentBtn").addEventListener("click", () => {
     lessonAttendance = lessonAttendance.map((item) => ({ ...item, status: "present" }));
     renderLessonPickers();
@@ -161,6 +162,8 @@ function init() {
 
   $("templateForm").addEventListener("submit", saveTemplate);
   $("resetTemplateBtn").addEventListener("click", resetTemplateForm);
+  $("templateName").addEventListener("input", updateTemplateNameManualState);
+  $("templateClass").addEventListener("input", () => syncTemplateNameWithSelection());
   ["templateType", "templateGrade", "templateBillingMode"].forEach((id) => $(id).addEventListener("input", renderTemplateFormPickers));
 
   $("studentForm").addEventListener("submit", saveStudent);
@@ -564,7 +567,7 @@ function appendNote(text) {
 function sortedTemplates(includeDisabled = false) {
   return state.courseTemplates
     .filter((template) => includeDisabled || template.enabled !== false)
-    .sort((a, b) => (Number(a.sortOrder ?? 100) - Number(b.sortOrder ?? 100)) || ((b.lastUsedAt || "").localeCompare(a.lastUsedAt || "")) || a.name.localeCompare(b.name, "zh-CN"));
+    .sort((a, b) => ((b.lastUsedAt || "").localeCompare(a.lastUsedAt || "")) || a.name.localeCompare(b.name, "zh-CN"));
 }
 
 function renderLessonTemplates() {
@@ -608,6 +611,7 @@ function selectLessonTemplate(id) {
   if (!template) return;
   activeTemplate = template;
   $("selectedTemplateId").value = id;
+  $("trialStudentsInput").value = "";
   lessonAttendance = buildAttendanceFromTemplate(template);
   renderLessonTemplates();
   renderLessonPickers();
@@ -634,6 +638,7 @@ function renderLessonPickers() {
   if (!hasTemplate) {
     $("selectedLessonSummary").innerHTML = "";
     $("attendanceList").innerHTML = "";
+    $("trialStudentsWrap").classList.add("hidden");
     renderAttendanceSummary();
     return;
   }
@@ -646,12 +651,13 @@ function renderLessonPickers() {
     <span>${h(COURSE_TYPES[activeTemplate.courseType])}｜${h(activeTemplate.grade)}${className ? `｜${h(className)}` : ""}${tag ? `｜${h(tag)}` : ""}</span>
   `;
   $("allPresentBtn").classList.toggle("hidden", activeTemplate.courseType !== "classCourse");
+  $("trialStudentsWrap").classList.toggle("hidden", activeTemplate.courseType !== "classCourse");
   $("attendanceList").innerHTML = lessonAttendance.length ? lessonAttendance.map((item) => {
     if (activeTemplate.courseType === "classCourse") {
       return `
-        <button type="button" class="attendance-card ${item.status}" onclick="cycleAttendance('${item.studentId}')">
+        <button type="button" class="attendance-card ${item.status} ${item.isTrial ? "trial" : ""}" onclick="cycleAttendance('${item.studentId}')">
           <strong>${h(item.name)}</strong>
-          <span>${STATUS_LABELS[item.status]}</span>
+          <span>${item.isTrial ? `试听｜${STATUS_LABELS[item.status]}` : STATUS_LABELS[item.status]}</span>
         </button>
       `;
     }
@@ -679,6 +685,27 @@ function cycleAttendance(studentId) {
   });
   renderLessonPickers();
   updateLessonCalculation();
+}
+
+function syncTrialStudents() {
+  if (!activeTemplate || activeTemplate.courseType !== "classCourse") return;
+  const existing = lessonAttendance.filter((item) => !item.isTrial);
+  const trials = parseTrialStudentNames($("trialStudentsInput").value).map((name, index) => ({
+    studentId: `trial-${index}`,
+    name,
+    status: "present",
+    isTrial: true
+  }));
+  lessonAttendance = [...existing, ...trials];
+  renderLessonPickers();
+  updateLessonCalculation();
+}
+
+function parseTrialStudentNames(value) {
+  return [...new Set(String(value || "")
+    .split(/[\n,，、;；\s]+/)
+    .map((name) => name.trim())
+    .filter(Boolean))];
 }
 
 function getSelectedLessonData() {
@@ -802,6 +829,7 @@ function resetLessonForm(keepDate = $("lessonDate").value || today()) {
   $("lessonDate").value = keepDate;
   $("manualAmount").value = "";
   $("lessonNote").value = "";
+  $("trialStudentsInput").value = "";
   activeTemplate = null;
   lessonAttendance = [];
   renderLessonTemplates();
@@ -828,6 +856,7 @@ function editLesson(id) {
   $("manualAmount").value = record.manualAmount ?? "";
   $("lessonNote").value = record.note || "";
   lessonAttendance = normalizedAttendance(record);
+  $("trialStudentsInput").value = lessonAttendance.filter((item) => item.isTrial).map((item) => item.name).join("、");
   switchTab("record");
   renderLessonTemplates();
   renderLessonPickers();
@@ -864,12 +893,14 @@ function saveTemplate(event) {
   const type = $("templateType").value;
   const studentIds = type === "oneToOne" ? selectedTemplateStudentIds() : [];
   const classId = type === "classCourse" ? $("templateClass").value : "";
-  if (!$("templateName").value.trim()) return alert("请填写课程名称。");
   if (type === "oneToOne" && studentIds.length !== 1) return alert("一对一模板必须关联 1 个个人学生。");
   if (type === "classCourse" && !classId) return alert("班课模板必须关联 1 个班级。");
+  const templateName = $("templateName").value.trim() || suggestedTemplateName();
+  if (!templateName) return alert("请选择学生或班级，系统会自动生成课程名称。");
+  $("templateName").value = templateName;
   const template = {
     id,
-    name: $("templateName").value.trim(),
+    name: templateName,
     courseType: type,
     sourceType: type === "classCourse" ? "class" : "personal",
     grade: $("templateGrade").value,
@@ -879,7 +910,7 @@ function saveTemplate(event) {
     fixedMode: $("templateBillingMode").value,
     fixedPrice: numberOrNull($("templateFixedPrice").value),
     enabled: $("templateEnabled").checked,
-    sortOrder: Number($("templateSort").value || 100),
+    sortOrder: state.courseTemplates.find((item) => item.id === id)?.sortOrder ?? 100,
     note: $("templateNote").value.trim(),
     lastUsedAt: state.courseTemplates.find((item) => item.id === id)?.lastUsedAt || ""
   };
@@ -893,9 +924,10 @@ function saveTemplate(event) {
 function resetTemplateForm() {
   $("templateId").value = "";
   $("templateName").value = "";
+  $("templateName").dataset.manualName = "false";
+  $("templateName").dataset.suggestedName = "";
   $("templateType").value = "oneToOne";
   $("templateGrade").value = GRADES[0];
-  $("templateSort").value = "100";
   $("templateClass").value = "";
   $("templateBillingMode").value = "auto";
   $("templateFixedPrice").value = "";
@@ -932,17 +964,53 @@ function renderTemplateFormPickers() {
       const limit = 1;
       const checked = Array.from($("templateStudents").querySelectorAll("input:checked"));
       if (checked.length > limit) event.target.checked = false;
+      syncTemplateNameWithSelection();
     });
   });
+  syncTemplateNameWithSelection();
 }
 
 function selectedTemplateStudentIds() {
   return Array.from($("templateStudents").querySelectorAll("input:checked")).map((input) => input.value);
 }
 
+function suggestedTemplateName() {
+  const type = $("templateType").value;
+  if (type === "classCourse") return getClass($("templateClass").value)?.name || "";
+  const studentId = selectedTemplateStudentIds()[0];
+  return getStudent(studentId)?.name || "";
+}
+
+function syncTemplateNameWithSelection({ force = false } = {}) {
+  const input = $("templateName");
+  const suggestion = suggestedTemplateName();
+  const previousSuggestion = input.dataset.suggestedName || "";
+  const current = input.value.trim();
+  const isManual = input.dataset.manualName === "true";
+  input.dataset.suggestedName = suggestion;
+  if (!suggestion) return;
+  if (force || !isManual || !current || current === previousSuggestion) {
+    input.value = suggestion;
+    input.dataset.manualName = "false";
+  }
+}
+
+function updateTemplateNameManualState() {
+  const input = $("templateName");
+  const current = input.value.trim();
+  const suggestion = input.dataset.suggestedName || suggestedTemplateName();
+  input.dataset.manualName = current && current !== suggestion ? "true" : "false";
+}
+
 function renderTemplateList() {
   const templates = sortedTemplates(true);
-  $("templateList").innerHTML = templates.length ? templates.map((template) => {
+  $("templateList").innerHTML = templates.length ? TYPE_GROUPS.map(([type, label]) => {
+    const group = templates.filter((template) => template.courseType === type);
+    if (!group.length) return "";
+    return `
+      <div class="template-list-group">
+        <h3>${label}</h3>
+        ${group.map((template) => {
     const names = template.courseType === "classCourse"
       ? (getClass(template.classId)?.name || template.className || "")
       : (template.studentIds || []).map((id) => getStudent(id)?.name || "已删除学生").join("、");
@@ -950,7 +1018,7 @@ function renderTemplateList() {
       <article class="item">
         <div class="item-head">
           <strong>${h(template.name)}</strong>
-          <span class="muted">${template.enabled === false ? "停用" : "启用"}｜排序 ${Number(template.sortOrder ?? 100)}</span>
+          <span class="muted">${template.enabled === false ? "停用" : "启用"}</span>
         </div>
         <p>${h(COURSE_TYPES[template.courseType])}｜${h(template.grade)}｜${h(names || "未关联")}</p>
         ${template.note ? `<p>${h(template.note)}</p>` : ""}
@@ -959,6 +1027,9 @@ function renderTemplateList() {
           <button class="danger small" onclick="deleteTemplate('${template.id}')">删除</button>
         </div>
       </article>
+    `;
+        }).join("")}
+      </div>
     `;
   }).join("") : `<div class="empty">还没有课程模板。</div>`;
 }
@@ -970,16 +1041,21 @@ function editTemplate(id) {
   $("templateName").value = template.name;
   $("templateType").value = template.courseType;
   $("templateGrade").value = template.grade;
-  $("templateSort").value = template.sortOrder ?? 100;
   $("templateNote").value = template.note || "";
   $("templateBillingMode").value = template.fixedMode || "auto";
   $("templateFixedPrice").value = template.fixedPrice ?? "";
   $("templateEnabled").checked = template.enabled !== false;
+  $("templateName").dataset.manualName = "true";
+  $("templateName").dataset.suggestedName = "";
   renderTemplateFormPickers();
   $("templateClass").value = template.classId || "";
   $("templateStudents").querySelectorAll("input").forEach((input) => {
     input.checked = (template.studentIds || []).includes(input.value);
   });
+  const suggestion = suggestedTemplateName();
+  $("templateName").dataset.suggestedName = suggestion;
+  $("templateName").dataset.manualName = template.name && template.name !== suggestion ? "true" : "false";
+  syncTemplateNameWithSelection();
   switchTab("templates");
 }
 

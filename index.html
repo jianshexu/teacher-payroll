@@ -84,6 +84,9 @@
                 <button id="allPresentBtn" type="button" class="secondary small">全到</button>
               </div>
               <div id="attendanceList" class="attendance-list"></div>
+              <label id="trialStudentsWrap" class="trial-students hidden">临时试听学生
+                <textarea id="trialStudentsInput" rows="2" placeholder="只记本次课，例如：张三、李四"></textarea>
+              </label>
             </div>
 
             <div class="result-box">
@@ -139,8 +142,8 @@
             </div>
             <input type="hidden" id="templateId">
             <div class="form-grid">
-              <label>课程名称
-                <input id="templateName" type="text" required placeholder="例如：九年级周六班课">
+              <label>课程名称（自动）
+                <input id="templateName" type="text" placeholder="选学生或班级后自动填写">
               </label>
               <label>课程类型
                 <select id="templateType">
@@ -150,9 +153,6 @@
               </label>
               <label>年级
                 <select id="templateGrade"></select>
-              </label>
-              <label>排序
-                <input id="templateSort" type="number" step="1" value="100">
               </label>
               <label id="templateClassWrap">关联班级
                 <select id="templateClass"></select>
