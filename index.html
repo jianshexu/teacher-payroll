@@ -208,6 +208,9 @@
             <label>按月份查看
               <input id="filterMonth" type="month">
             </label>
+            <label>机构标签
+              <select id="filterTag"></select>
+            </label>
           </div>
           <div class="stats-grid">
             <div class="stat"><span>今日工资</span><strong id="statsTodayTotal">¥0</strong></div>
@@ -225,6 +228,7 @@
                   <th>课程名称</th>
                   <th>类型</th>
                   <th>年级</th>
+                  <th>机构标签</th>
                   <th>班级</th>
                   <th>学生</th>
                   <th>到课</th>
@@ -261,6 +265,9 @@
               </label>
               <label>一对一特殊价格
                 <input id="specialOne" type="number" min="0" step="1" placeholder="可为空">
+              </label>
+              <label>机构标签
+                <input id="studentTag" type="text" placeholder="例如：机构A">
               </label>
             </div>
             <label>备注
@@ -303,6 +310,9 @@
               </label>
               <label>每增加 1 人加价
                 <input id="classExtraPrice" type="number" min="0" step="1" value="10">
+              </label>
+              <label>机构标签
+                <input id="classTag" type="text" placeholder="例如：机构A">
               </label>
             </div>
             <label>批量添加学生

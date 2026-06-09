@@ -40,6 +40,7 @@ const currentMonth = () => today().slice(0, 7);
 const money = (value) => `¥${Number(value || 0).toLocaleString("zh-CN")}`;
 const numberOrNull = (value) => value === "" || value === null || Number.isNaN(Number(value)) ? null : Number(value);
 const normalizeCourseType = (type) => type === "oneToTwo" || type === "smallClass" || type === "multi" ? "classCourse" : type;
+const normalizeTag = (value) => String(value || "").trim();
 const h = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
   "&": "&amp;",
   "<": "&lt;",
@@ -84,6 +85,7 @@ function migrateState(data) {
     id: student.id || uid(),
     name: student.name || "",
     grade: student.grade || GRADES[0],
+    institutionTag: normalizeTag(student.institutionTag || student.tag || student.sourceTag),
     specialOne: student.specialOne ?? null,
     note: student.note || ""
   }));
@@ -97,6 +99,7 @@ function migrateState(data) {
       id: classItem.id || uid(),
       name: classItem.name || "",
       grade: classItem.grade || GRADES[0],
+      institutionTag: normalizeTag(classItem.institutionTag || classItem.tag || classItem.sourceTag),
       students: migratedMembers.map((member) => ({
         id: member.id || uid(),
         name: member.name || "",
@@ -118,7 +121,11 @@ function migrateState(data) {
       fixedPrice: template.fixedPrice ?? null
     };
   });
-  const records = (data.records || []).map((record) => ({ ...record, courseType: normalizeCourseType(record.courseType) }));
+  const records = (data.records || []).map((record) => ({
+    ...record,
+    courseType: normalizeCourseType(record.courseType),
+    institutionTag: normalizeTag(record.institutionTag || record.tag || record.sourceTag)
+  }));
   return { ...data, students, classes, courseTemplates, records };
 }
 
@@ -170,6 +177,7 @@ function init() {
     $("filterDate").value = "";
     renderStats();
   });
+  $("filterTag").addEventListener("input", renderStats);
   $("exportCsvBtn").addEventListener("click", exportCurrentMonthCsv);
   $("exportJsonBtn").addEventListener("click", exportJsonBackup);
   $("importJsonBtn").addEventListener("click", () => $("importJsonFile").click());
@@ -320,6 +328,7 @@ function renderAll() {
   renderStudents();
   renderClasses();
   renderClassStudentList();
+  renderTagFilter();
   renderStats();
   renderSettings();
   updateHeaderTotal();
@@ -409,6 +418,7 @@ function toStudentRow(student, userId, now) {
     user_id: userId,
     name: student.name,
     grade: student.grade,
+    institution_tag: student.institutionTag || "",
     special_one: student.specialOne,
     note: student.note || "",
     created_at: now,
@@ -421,6 +431,7 @@ function fromStudentRow(row) {
     id: row.id,
     name: row.name,
     grade: row.grade,
+    institutionTag: row.institution_tag || "",
     specialOne: row.special_one ?? null,
     note: row.note || ""
   };
@@ -432,6 +443,7 @@ function toClassRow(classItem, userId, now) {
     user_id: userId,
     name: classItem.name,
     grade: classItem.grade,
+    institution_tag: classItem.institutionTag || "",
     students: classItem.students || [],
     fixed_price: classItem.smallBasePrice,
     extra_per_student: classItem.extraPerStudent ?? 10,
@@ -446,6 +458,7 @@ function fromClassRow(row) {
     id: row.id,
     name: row.name,
     grade: row.grade,
+    institutionTag: row.institution_tag || "",
     students: row.students || [],
     smallBasePrice: row.fixed_price ?? null,
     extraPerStudent: row.extra_per_student ?? 10,
@@ -501,6 +514,7 @@ function toRecordRow(record, userId, now) {
     course_name: record.courseName || "",
     course_type: record.courseType,
     grade: record.grade,
+    institution_tag: record.institutionTag || "",
     student_name: record.studentName || "",
     class_id: record.classId || null,
     class_name: record.className || "",
@@ -526,6 +540,7 @@ function fromRecordRow(row) {
     courseName: row.course_name || "",
     courseType: row.course_type,
     grade: row.grade,
+    institutionTag: row.institution_tag || "",
     studentName: row.student_name || "",
     classId: row.class_id || "",
     className: row.class_name || "",
@@ -573,14 +588,17 @@ function renderLessonTemplates() {
 }
 
 function lessonTemplateCard(template) {
-  const className = getClass(template.classId)?.name || template.className || "";
-  const studentNames = (template.studentIds || []).map((id) => getStudent(id)?.name || "已删除学生").join("、");
+  const classItem = getClass(template.classId);
+  const students = (template.studentIds || []).map((id) => getStudent(id)).filter(Boolean);
+  const className = classItem?.name || template.className || "";
+  const studentNames = students.map((student) => student.name).join("、") || (template.studentIds || []).map(() => "已删除学生").join("、");
+  const tag = template.courseType === "classCourse" ? classItem?.institutionTag : students[0]?.institutionTag;
   const subtitle = template.courseType === "classCourse" ? className : studentNames;
   return `
     <button type="button" class="template-card ${activeTemplate?.id === template.id ? "is-selected" : ""}" onclick="selectLessonTemplate('${template.id}')">
       <strong>${h(template.name)}</strong>
       <span>${h(COURSE_TYPES[template.courseType])}｜${h(template.grade)}</span>
-      <small>${h(subtitle || "未关联")}</small>
+      <small>${h([subtitle || "未关联", tag].filter(Boolean).join("｜"))}</small>
     </button>
   `;
 }
@@ -619,10 +637,13 @@ function renderLessonPickers() {
     renderAttendanceSummary();
     return;
   }
-  const className = activeTemplate.courseType === "classCourse" ? (getClass(activeTemplate.classId)?.name || activeTemplate.className || "") : "";
+  const classItem = activeTemplate.courseType === "classCourse" ? getClass(activeTemplate.classId) : null;
+  const student = activeTemplate.courseType === "oneToOne" ? getStudent((activeTemplate.studentIds || [])[0]) : null;
+  const className = classItem?.name || activeTemplate.className || "";
+  const tag = classItem?.institutionTag || student?.institutionTag || "";
   $("selectedLessonSummary").innerHTML = `
     <strong>${h(activeTemplate.name)}</strong>
-    <span>${h(COURSE_TYPES[activeTemplate.courseType])}｜${h(activeTemplate.grade)}${className ? `｜${h(className)}` : ""}</span>
+    <span>${h(COURSE_TYPES[activeTemplate.courseType])}｜${h(activeTemplate.grade)}${className ? `｜${h(className)}` : ""}${tag ? `｜${h(tag)}` : ""}</span>
   `;
   $("allPresentBtn").classList.toggle("hidden", activeTemplate.courseType !== "classCourse");
   $("attendanceList").innerHTML = lessonAttendance.length ? lessonAttendance.map((item) => {
@@ -750,6 +771,7 @@ function saveLesson(event) {
     courseName: activeTemplate.name,
     courseType: activeTemplate.courseType,
     grade: activeTemplate.grade,
+    institutionTag: data.selectedClass?.institutionTag || data.selectedStudents[0]?.institutionTag || "",
     classId: data.selectedClass?.id || "",
     className: data.selectedClass?.name || "",
     studentIds: data.attendance.filter((item) => item.status === "present").map((item) => item.studentId),
@@ -975,6 +997,7 @@ function saveStudent(event) {
     id,
     name: $("studentName").value.trim(),
     grade: $("studentGrade").value,
+    institutionTag: normalizeTag($("studentTag").value),
     specialOne: numberOrNull($("specialOne").value),
     note: $("studentNote").value.trim()
   };
@@ -990,6 +1013,7 @@ function resetStudentForm() {
   $("studentId").value = "";
   $("studentName").value = "";
   $("studentGrade").value = GRADES[0];
+  $("studentTag").value = "";
   $("specialOne").value = "";
   $("studentNote").value = "";
 }
@@ -1008,7 +1032,7 @@ function renderStudents() {
       <article class="item">
         <div class="item-head">
           <strong>${h(student.name)}</strong>
-          <span class="muted">${h(student.grade)}</span>
+          <span class="muted">${h([student.grade, student.institutionTag].filter(Boolean).join("｜"))}</span>
         </div>
         <p>${h(specials)}</p>
         ${student.note ? `<p>${h(student.note)}</p>` : ""}
@@ -1027,6 +1051,7 @@ function editStudent(id) {
   $("studentId").value = student.id;
   $("studentName").value = student.name;
   $("studentGrade").value = student.grade;
+  $("studentTag").value = student.institutionTag || "";
   $("specialOne").value = student.specialOne ?? "";
   $("studentNote").value = student.note || "";
   switchTab("students");
@@ -1098,6 +1123,7 @@ function saveClass(event) {
     id,
     name: $("className").value.trim(),
     grade: $("classGrade").value,
+    institutionTag: normalizeTag($("classTag").value),
     students: editingClassStudents.filter((student) => student.name).map((student) => ({ ...student })),
     smallBasePrice: numberOrNull($("classBasePrice").value),
     extraPerStudent: numberOrNull($("classExtraPrice").value) ?? 10,
@@ -1115,6 +1141,7 @@ function resetClassForm(shouldRender = true) {
   $("classId").value = "";
   $("className").value = "";
   $("classGrade").value = GRADES[0];
+  $("classTag").value = "";
   $("classBasePrice").value = "";
   $("classExtraPrice").value = "10";
   $("classBulkStudents").value = "";
@@ -1132,7 +1159,7 @@ function renderClasses() {
       <article class="item">
         <div class="item-head">
           <strong>${h(classItem.name)}</strong>
-          <span class="muted">${h(classItem.grade)}</span>
+          <span class="muted">${h([classItem.grade, classItem.institutionTag].filter(Boolean).join("｜"))}</span>
         </div>
         <p>${h(price)}</p>
         <p>在读：${h(active.map((student) => student.name).join("、") || "暂无")}</p>
@@ -1153,6 +1180,7 @@ function editClass(id) {
   $("classId").value = classItem.id;
   $("className").value = classItem.name;
   $("classGrade").value = classItem.grade;
+  $("classTag").value = classItem.institutionTag || "";
   $("classBasePrice").value = classItem.smallBasePrice ?? "";
   $("classExtraPrice").value = classItem.extraPerStudent ?? 10;
   $("classNote").value = classItem.note || "";
@@ -1173,12 +1201,25 @@ function renderStats() {
   const todayDate = today();
   const month = $("filterMonth").value || currentMonth();
   const filterDate = $("filterDate").value;
+  const filterTag = $("filterTag").value;
   const todayRecords = state.records.filter((record) => record.date === todayDate);
   const monthRecords = state.records.filter((record) => record.date.startsWith(month));
-  const displayRecords = state.records.filter((record) => filterDate ? record.date === filterDate : record.date.startsWith(month));
+  const displayRecords = state.records.filter((record) => {
+    if (filterDate ? record.date !== filterDate : !record.date.startsWith(month)) return false;
+    if (filterTag && recordInstitutionTag(record) !== filterTag) return false;
+    return true;
+  });
   renderStatNumbers(todayRecords, monthRecords, displayRecords);
   renderTodayRecords(todayRecords);
   renderRecordTable(displayRecords);
+}
+
+function renderTagFilter() {
+  const select = $("filterTag");
+  const current = select.value;
+  const tags = availableInstitutionTags();
+  select.innerHTML = `<option value="">全部机构</option>` + tags.map((tag) => `<option value="${h(tag)}">${h(tag)}</option>`).join("");
+  if (tags.includes(current)) select.value = current;
 }
 
 function renderStatNumbers(todayRecords, monthRecords, displayRecords) {
@@ -1223,6 +1264,7 @@ function renderRecordTable(records) {
         <td>${h(latest.courseName || "")}</td>
         <td>${COURSE_TYPES[latest.courseType]}</td>
         <td>${h(latest.grade)}</td>
+        <td>${h(group.institutionTag || "未分类")}</td>
         <td>${h(latest.className || "")}</td>
         <td>
           <div>最近一次到课：${h(attendanceNames(latest, "present") || "-")}</div>
@@ -1250,13 +1292,14 @@ function renderRecordTable(records) {
         </td>
       </tr>
     `;
-  }).join("") : `<tr><td colspan="15">暂无明细。</td></tr>`;
+  }).join("") : `<tr><td colspan="16">暂无明细。</td></tr>`;
 }
 
 function groupRecordsForStats(records) {
   const groups = new Map();
   records.forEach((record) => {
-    const key = record.templateId || `${record.courseName || ""}|${record.courseType}|${record.grade}|${record.className || ""}`;
+    const tag = recordInstitutionTag(record);
+    const key = `${tag}|${record.templateId || `${record.courseName || ""}|${record.courseType}|${record.grade}|${record.className || ""}`}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(record);
   });
@@ -1268,6 +1311,7 @@ function groupRecordsForStats(records) {
       count: sorted.length,
       totalAmount: sum(sorted),
       allConfirmed: sorted.every((record) => record.confirmed),
+      institutionTag: recordInstitutionTag(sorted[0]),
       dateText: dates.length === 1 ? dates[0] : `${dates[0]} 至 ${dates[dates.length - 1]}`
     };
   }).sort((a, b) => {
@@ -1278,9 +1322,10 @@ function groupRecordsForStats(records) {
 
 function exportCurrentMonthCsv() {
   const month = $("filterMonth").value || currentMonth();
-  const records = state.records.filter((record) => record.date.startsWith(month));
+  const filterTag = $("filterTag").value;
+  const records = state.records.filter((record) => record.date.startsWith(month) && (!filterTag || recordInstitutionTag(record) === filterTag));
   const groups = groupRecordsForStats(records);
-  const headers = ["日期范围", "课程名称", "类型", "年级", "学生/班级", "次数", "总工资", "确认状态", "备注"];
+  const headers = ["日期范围", "课程名称", "类型", "年级", "机构标签", "学生/班级", "次数", "总工资", "确认状态", "备注"];
   const rows = groups.map((group) => {
     const latest = group.records[0];
     const name = latest.courseType === "classCourse"
@@ -1292,6 +1337,7 @@ function exportCurrentMonthCsv() {
       latest.courseName || "",
       COURSE_TYPES[latest.courseType],
       latest.grade,
+      group.institutionTag || "未分类",
       name,
       group.count,
       group.totalAmount,
@@ -1404,6 +1450,25 @@ function attendanceNames(record, status) {
 
 function sum(records) {
   return records.reduce((total, record) => total + Number(record.amount || 0), 0);
+}
+
+function availableInstitutionTags() {
+  return [...new Set([
+    ...state.students.map((student) => student.institutionTag),
+    ...state.classes.map((classItem) => classItem.institutionTag),
+    ...state.records.map((record) => recordInstitutionTag(record))
+  ].map(normalizeTag).filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-CN"));
+}
+
+function recordInstitutionTag(record) {
+  const savedTag = normalizeTag(record.institutionTag);
+  if (savedTag) return savedTag;
+  const classTag = normalizeTag(getClass(record.classId)?.institutionTag);
+  if (classTag) return classTag;
+  const template = state.courseTemplates.find((item) => item.id === record.templateId);
+  if (template?.courseType === "classCourse") return normalizeTag(getClass(template.classId)?.institutionTag);
+  const studentId = (template?.studentIds || record.studentIds || normalizedAttendance(record).map((item) => item.studentId)).filter(Boolean)[0];
+  return normalizeTag(getStudent(studentId)?.institutionTag);
 }
 
 function updateHeaderTotal() {

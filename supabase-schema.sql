@@ -15,6 +15,7 @@ create table if not exists public.one_on_one_students (
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
   grade text not null,
+  institution_tag text,
   special_one numeric,
   note text,
   created_at timestamptz not null default now(),
@@ -27,6 +28,7 @@ create table if not exists public.classes (
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
   grade text not null,
+  institution_tag text,
   students jsonb not null default '[]'::jsonb,
   fixed_price numeric,
   extra_per_student numeric not null default 10,
@@ -86,6 +88,7 @@ create table if not exists public.lesson_records (
   course_name text,
   course_type text not null,
   grade text not null,
+  institution_tag text,
   student_name text,
   class_id text,
   class_name text,
@@ -102,6 +105,10 @@ create table if not exists public.lesson_records (
   updated_at timestamptz not null default now(),
   primary key (id, user_id)
 );
+
+alter table public.one_on_one_students add column if not exists institution_tag text;
+alter table public.classes add column if not exists institution_tag text;
+alter table public.lesson_records add column if not exists institution_tag text;
 
 alter table public.profiles enable row level security;
 alter table public.one_on_one_students enable row level security;
