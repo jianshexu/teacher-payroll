@@ -181,6 +181,7 @@ function init() {
     renderStats();
   });
   $("filterTag").addEventListener("input", renderStats);
+  $("filterCourseType").addEventListener("input", renderStats);
   $("exportCsvBtn").addEventListener("click", exportCurrentMonthCsv);
   $("exportJsonBtn").addEventListener("click", exportJsonBackup);
   $("importJsonBtn").addEventListener("click", () => $("importJsonFile").click());
@@ -1278,11 +1279,13 @@ function renderStats() {
   const month = $("filterMonth").value || currentMonth();
   const filterDate = $("filterDate").value;
   const filterTag = $("filterTag").value;
+  const filterCourseType = $("filterCourseType").value;
   const todayRecords = state.records.filter((record) => record.date === todayDate);
   const monthRecords = state.records.filter((record) => record.date.startsWith(month));
   const displayRecords = state.records.filter((record) => {
     if (filterDate ? record.date !== filterDate : !record.date.startsWith(month)) return false;
     if (filterTag && recordInstitutionTag(record) !== filterTag) return false;
+    if (filterCourseType && record.courseType !== filterCourseType) return false;
     return true;
   });
   renderStatNumbers(todayRecords, monthRecords, displayRecords);
@@ -1399,7 +1402,12 @@ function groupRecordsForStats(records) {
 function exportCurrentMonthCsv() {
   const month = $("filterMonth").value || currentMonth();
   const filterTag = $("filterTag").value;
-  const records = state.records.filter((record) => record.date.startsWith(month) && (!filterTag || recordInstitutionTag(record) === filterTag));
+  const filterCourseType = $("filterCourseType").value;
+  const records = state.records.filter((record) =>
+    record.date.startsWith(month)
+    && (!filterTag || recordInstitutionTag(record) === filterTag)
+    && (!filterCourseType || record.courseType === filterCourseType)
+  );
   const groups = groupRecordsForStats(records);
   const headers = ["日期范围", "课程名称", "类型", "年级", "机构标签", "学生/班级", "次数", "总工资", "确认状态", "备注"];
   const rows = groups.map((group) => {
