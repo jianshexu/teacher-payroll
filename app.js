@@ -154,7 +154,7 @@ function init() {
 
   $("templateForm").addEventListener("submit", saveTemplate);
   $("resetTemplateBtn").addEventListener("click", resetTemplateForm);
-  ["templateType", "templateGrade", "templateClass", "templateBillingMode"].forEach((id) => $(id).addEventListener("input", renderTemplateFormPickers));
+  ["templateType", "templateGrade", "templateBillingMode"].forEach((id) => $(id).addEventListener("input", renderTemplateFormPickers));
 
   $("studentForm").addEventListener("submit", saveStudent);
   $("resetStudentBtn").addEventListener("click", resetStudentForm);
@@ -885,15 +885,17 @@ function resetTemplateForm() {
 function renderTemplateFormPickers() {
   const type = $("templateType").value;
   const grade = $("templateGrade").value;
+  const selectedClassId = $("templateClass").value;
   const isClass = type === "classCourse";
   $("templateClassWrap").classList.toggle("hidden", !isClass);
   $("templateBillingWrap").classList.toggle("hidden", !isClass);
   $("templateFixedPriceWrap").classList.toggle("hidden", !isClass || $("templateBillingMode").value !== "fixed");
   $("templateStudentsWrap").classList.toggle("hidden", isClass);
-  $("templateClass").innerHTML = `<option value="">选择班级</option>` + state.classes
-    .filter((item) => item.grade === grade)
-    .map((item) => `<option value="${item.id}">${h(item.name)}</option>`)
+  const classOptions = state.classes.filter((item) => item.grade === grade);
+  $("templateClass").innerHTML = `<option value="">${classOptions.length ? "选择班级" : `当前年级还没有班级`}</option>` + classOptions
+    .map((item) => `<option value="${item.id}">${h(item.name)}（${h(item.grade)}）</option>`)
     .join("");
+  if (classOptions.some((item) => item.id === selectedClassId)) $("templateClass").value = selectedClassId;
   const selectedIds = selectedTemplateStudentIds();
   $("templateStudentHint").textContent = "一对一请选择 1 名学生";
   const students = state.students.filter((student) => student.grade === grade);
