@@ -1267,37 +1267,39 @@ function groupRecordsForStats(records) {
       records: sorted,
       count: sorted.length,
       totalAmount: sum(sorted),
+      allConfirmed: sorted.every((record) => record.confirmed),
       dateText: dates.length === 1 ? dates[0] : `${dates[0]} 至 ${dates[dates.length - 1]}`
     };
-  }).sort((a, b) => b.records[0].date.localeCompare(a.records[0].date));
+  }).sort((a, b) => {
+    if (a.allConfirmed !== b.allConfirmed) return a.allConfirmed ? 1 : -1;
+    return b.records[0].date.localeCompare(a.records[0].date);
+  });
 }
 
 function exportCurrentMonthCsv() {
   const month = $("filterMonth").value || currentMonth();
   const records = state.records.filter((record) => record.date.startsWith(month));
-  const headers = ["记录ID", "日期", "课程名称", "课程类型", "年级", "班级", "到课学生", "请假学生", "缺席学生", "到课人数", "请假人数", "缺席人数", "工资金额", "价格来源", "备注", "是否确认"];
-  const rows = records.map((record) => {
-    const counts = attendanceCounts(normalizedAttendance(record));
+  const groups = groupRecordsForStats(records);
+  const headers = ["日期范围", "课程名称", "类型", "年级", "学生/班级", "次数", "总工资", "确认状态", "备注"];
+  const rows = groups.map((group) => {
+    const latest = group.records[0];
+    const name = latest.courseType === "classCourse"
+      ? latest.className || latest.courseName || ""
+      : latest.courseName || latest.studentName || "";
+    const notes = [...new Set(group.records.map((record) => record.note || "").filter(Boolean))].join("；");
     return [
-      record.id,
-      record.date,
-      record.courseName || "",
-      COURSE_TYPES[record.courseType],
-      record.grade,
-      record.className || "",
-      attendanceNames(record, "present"),
-      attendanceNames(record, "leave"),
-      attendanceNames(record, "absent"),
-      counts.present,
-      counts.leave,
-      counts.absent,
-      record.amount,
-      record.priceSource,
-      record.note || "",
-      record.confirmed ? "已确认" : "未确认"
+      group.dateText,
+      latest.courseName || "",
+      COURSE_TYPES[latest.courseType],
+      latest.grade,
+      name,
+      group.count,
+      group.totalAmount,
+      group.allConfirmed ? "已确认" : "有未确认",
+      notes
     ];
   });
-  downloadBlob("\ufeff" + [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n"), `${month}-工资明细.csv`, "text/csv;charset=utf-8");
+  downloadBlob("\ufeff" + [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n"), `${month}-工资汇总.csv`, "text/csv;charset=utf-8");
 }
 
 function exportJsonBackup() {
